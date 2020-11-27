@@ -57,6 +57,7 @@
  * Elliott Wood		   11/20/07	Added leftRotateDWORD()
  ********************************************************************/
 #define __HELPERS_C
+#include <xc.h>
 
 #include "TCPIP Stack/TCPIP.h"
 

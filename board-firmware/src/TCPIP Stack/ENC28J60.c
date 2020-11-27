@@ -66,6 +66,7 @@
  * Howard Schlunder     8/07/06 Added SetRXHashTableEntry() function
 ********************************************************************/
 #define __ENC28J60_C
+#include <xc.h>
 
 #include "HardwareProfile.h"
 

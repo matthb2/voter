@@ -62,6 +62,7 @@ RAM for signed linear audio of the necessary buffer size; sigh!
 #include <time.h>
 #include <math.h>
 #include <dsp.h>
+#include <xc.h>
 
 /* Debug values:
 
