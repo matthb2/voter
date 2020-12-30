@@ -289,7 +289,7 @@ ROM char gpsmsg1[] = "GPS Receiver Active, waiting for aquisition\n", gpsmsg2[] 
  
 char newvalerror[] = "Invalid Entry, Value Not Changed\n", newvalnotchanged[] = "No Entry Made, Value Not Changed\n",
 	badmix[] = "  ERROR! Host rejecting connection\n",hosttmomsg[] = "  ERROR! Host response timeout\n",
-	VERSION[] = "1.51 08/07/2017";
+	VERSION[] = "1.52 12/30/2020";
 
 typedef struct {
 	DWORD vtime_sec;
@@ -427,6 +427,7 @@ WORD timing_index;
 DWORD next_time;
 DWORD next_index;
 WORD samplecnt;
+WORD samplecntstats[3];
 WORD last_adcsample;
 WORD last_index;
 WORD last_index1;
@@ -966,6 +967,16 @@ BOOL ppsx;
 					IEC1bits.T4IE = 1;
 					IPC6bits.T4IP = 6;
 					T4CONbits.TON = 1;
+
+					if(samplecntstats[0] <= 0 || samplecntstats[0] > samplecnt) //min
+                    {
+                        samplecntstats[0] = samplecnt;
+                    }
+					if(samplecntstats[2] < samplecnt) //max
+                    {
+                        samplecntstats[2] = samplecnt;
+                    }
+					samplecntstats[1] = samplecnt; //last
 	
 					if ((samplecnt >= 7999) && (samplecnt <= 8001))
 					{
@@ -2363,7 +2374,7 @@ extern float doubleify(BYTE *p);
 				gps_time = (DWORD) mktime(&tm) + 1;
 			else
 				gps_time = (DWORD) mktime(&tm);
-			gps_time += 619315200;
+			gps_time += AppConfig.GPSTimeOffset;
 			if (AppConfig.DebugLevel & 32)
 				printf("GPS-DEBUG: mon: %d, gps_time: %ld, ctime: %s\n",tm.tm_mon,gps_time,ctime((time_t *)&gps_time));
 			if (!USE_PPS) system_time.vtime_sec = timing_time = real_time = gps_time + 1;
@@ -4329,7 +4340,7 @@ static void IPMenu()
 		menu7[] = 
 		"14 - BootLoader IP Address (%d.%d.%d.%d) (%s)\n"
 		"15 - Ethernet Duplex (0=Half, 1=Full) (%d)\n",
-		menu8[] = 
+		menu8[] =
 		"99 - Save Values to EEPROM\n"
 		"x  - Exit IP Parameters Menu (back to main menu)\nq  - Disconnect Remote Console Session, r - reboot system\n\n",
 		entsel[] = "Enter Selection (1-14,99,c,x,q,r) : ";
@@ -4786,6 +4797,8 @@ int main(void)
 		"99 - Save Values to EEPROM\n"
 		"i - IP Parameters menu, o - Offline Mode Parameters menu\n"
 		"q - Disconnect Remote Console Session, r - reboot system, d - diagnostics\n\n",
+		menu6[] =
+        "20 - GPS Offset (%ld)\n",
 		entsel[] = "Enter Selection (1-27,97-99,r,q,d) : ";
 
 
@@ -4817,6 +4830,8 @@ int main(void)
 		"Current Peak Audio Level: %u\n",
 		oprdata8[] = 
 		"Squelch Noise Gain Value: %d, Diode Cal. Value: %d, SQL pot %d\n",
+		oprdata9[] =
+        "samplecnt: min: %d, last: %d, max: %d\n",
 		curtimeis[] = "Current Time: %s.%03lu\n";
 
 
@@ -4962,6 +4977,9 @@ int main(void)
 	memset(&last_rxpacket_sys_time,0,sizeof(last_rxpacket_sys_time));
 	last_rxpacket_index = 0;
 	last_rxpacket_inbounds = 0;
+	samplecntstats[0] = 0;
+	samplecntstats[1] = 0;
+	samplecntstats[2] = 0;
 
 
 	// Initialize application specific hardware
@@ -5134,6 +5152,7 @@ __builtin_nop();
 		char ok;
 		unsigned int i1,x;
 		unsigned long l;
+		long li;
 
 		SetTxTone(0);
 		if ((!netisup) && 
@@ -5167,6 +5186,9 @@ __builtin_nop();
 		printf(menu5,AppConfig.AltVoterServerFQDN,AppConfig.AltVoterServerPort,
 			AppConfig.Duplex3,AppConfig.LaunchDelay);
 #endif
+        main_processing_loop();
+        secondary_processing_loop();
+        printf(menu6,AppConfig.GPSTimeOffset);
 
 		aborted = 0;
 		while(!aborted)
@@ -5232,7 +5254,7 @@ __builtin_nop();
 #ifdef	DSPBEW
 		if (((sel >= 1) && (sel <= 19)) || (sel == 11780) || (sel == 1103) || (sel == 1170))
 #else
-		if ((((sel >= 1) && (sel <= 19)) || (sel == 11780) || (sel == 1103) || (sel == 1170)) && (sel != 17))
+		if ((((sel >= 1) && (sel <= 20)) || (sel == 11780) || (sel == 1103) || (sel == 1170)) && (sel != 17))
 #endif
 		{
 			printf(entnewval);
@@ -5406,6 +5428,13 @@ __builtin_nop();
 					ok = 1;
 				}
 				break;
+		    case 20: //GPS Offset
+		        if ((sscanf(cmdstr, "%lu", &li)))
+                {
+		            AppConfig.GPSTimeOffset = li;
+		            ok = 1;
+                }
+		        break;
 #ifdef	DUMPENCREGS
 			case 96:
 				DumpETHReg();
@@ -5459,6 +5488,7 @@ __builtin_nop();
 				printf(oprdata8,AppConfig.SqlNoiseGain,AppConfig.SqlDiode,adcothers[ADCSQPOT]);
 				main_processing_loop();
 				secondary_processing_loop();
+				printf(oprdata9, samplecntstats[0], samplecntstats[1], samplecntstats[2]);
 				strftime(cmdstr,sizeof(cmdstr) - 1,"%a  %b %d, %Y  %H:%M:%S",gmtime(&t));
 				if (((gps_state == GPS_STATE_SYNCED) || (!USE_PPS)) && system_time.vtime_sec)
 					printf(curtimeis,cmdstr,(unsigned long)system_time.vtime_nsec/1000000L);
