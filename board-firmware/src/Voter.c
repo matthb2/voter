@@ -428,6 +428,8 @@ DWORD next_time;
 DWORD next_index;
 WORD samplecnt;
 WORD samplecntstats[3];
+LONG pkt_counts[6];
+LONG misscount;
 WORD last_adcsample;
 WORD last_index;
 WORD last_index1;
@@ -2800,6 +2802,10 @@ void process_udp(UDP_SOCKET *udpSocketUser,NODE_INFO *udpServerNode)
 		{
 			if (n++ < sizeof(audio_packet)) *cp++ = c;	
 		}
+		if (ntohs(audio_packet.vph.payload_type) < 6) //Count rx'd packets for debugging
+        {
+		    pkt_counts[ntohs(audio_packet.vph.payload_type)]++;
+        }
 		if (n >= sizeof(VOTER_PACKET_HEADER)) {
 			/* if this is a new session */
 			if (strcmp((char *)audio_packet.vph.challenge,their_challenge))
@@ -2840,6 +2846,10 @@ void process_udp(UDP_SOCKET *udpSocketUser,NODE_INFO *udpServerNode)
 					}
 					else
 					{
+					    if(AppConfig.DebugLevel && 256)
+                        {
+					        printf("Packet type 0 bad digest\n");
+                        }
 						connected = 0;
 						txseqno = 0;
 						txseqno_ptt = 0;
@@ -2971,6 +2981,7 @@ void process_udp(UDP_SOCKET *udpSocketUser,NODE_INFO *udpServerNode)
                         }
 						else /* not in bounds */
 						{
+						    misscount++;
 							if (index > (AppConfig.TxBufferLength - (FRAME_SIZE * 2)))
 								missed = index - (AppConfig.TxBufferLength - (FRAME_SIZE * 2));
 							else
@@ -4980,6 +4991,8 @@ int main(void)
 	samplecntstats[0] = 0;
 	samplecntstats[1] = 0;
 	samplecntstats[2] = 0;
+	memset(pkt_counts, 0, sizeof(long)*6);
+	misscount = 0;
 
 
 	// Initialize application specific hardware
@@ -5494,6 +5507,10 @@ __builtin_nop();
 					printf(curtimeis,cmdstr,(unsigned long)system_time.vtime_nsec/1000000L);
 				main_processing_loop();
 				secondary_processing_loop();
+				printf("Packet Counts: %ld (challenge),%ld (audio),%ld (GPS?),%ld (adpcm audio),%ld (?),%ld (ping)\n", pkt_counts[0],pkt_counts[1],pkt_counts[2],pkt_counts[3],pkt_counts[4],pkt_counts[5]);
+				printf("Miss count: %ld\n", misscount);
+                main_processing_loop();
+                secondary_processing_loop();
 				mydiff = system_time.vtime_sec - last_rxpacket_sys_time.vtime_sec;
 				mydiff *= 1000;
 				mydiff1 = system_time.vtime_nsec - last_rxpacket_sys_time.vtime_nsec;
